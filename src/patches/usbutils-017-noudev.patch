@@ -1,0 +1,165 @@
+--- a/names.c
++++ b/names.c
+@@ -23,7 +23,9 @@
+ #include <stdbool.h>
+ 
+ #include <libusb.h>
++#ifdef HAVE_LIBUDEV
+ #include <libudev.h>
++#endif
+ 
+ #include "usb-spec.h"
+ #include "names.h"
+@@ -112,15 +114,117 @@
+ 	return names_genericstrtable(countrycodes_hash, countrycode);
+ }
+ 
++/* ---- 无 libudev 环境下的 usb.ids 回退实现 ---- */
++static char *usb_ids_buf;
++static char ids_name_buf[256];
++
++static int load_usb_ids(void)
++{
++	static const char *paths[] = {
++		"/usr/share/misc/usb.ids",
++		"/usr/share/hwdata/usb.ids",
++		"/usr/local/share/usb.ids",
++		"/etc/usb.ids",
++		"/system/usr/share/usb.ids",
++		"/system/etc/usb.ids",
++		NULL
++	};
++	FILE *f = NULL;
++	long sz;
++	int i;
++
++	for (i = 0; paths[i]; i++) {
++		f = fopen(paths[i], "r");
++		if (f)
++			break;
++	}
++	if (!f)
++		return -1;
++	if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return -1; }
++	sz = ftell(f);
++	if (sz <= 0) { fclose(f); return -1; }
++	rewind(f);
++	usb_ids_buf = malloc((size_t)sz + 1);
++	if (!usb_ids_buf) { fclose(f); return -1; }
++	if (fread(usb_ids_buf, 1, (size_t)sz, f) != (size_t)sz) {
++		free(usb_ids_buf); usb_ids_buf = NULL; fclose(f); return -1;
++	}
++	usb_ids_buf[sz] = '\0';
++	fclose(f);
++	return 0;
++}
++
++static const char *ids_name(const char *start, size_t len)
++{
++	while (len && (*start == ' ' || *start == '\t')) { start++; len--; }
++	while (len && (start[len - 1] == ' ' || start[len - 1] == '\t' ||
++		       start[len - 1] == '\r')) len--;
++	if (!len)
++		return NULL;
++	if (len > sizeof(ids_name_buf) - 1)
++		len = sizeof(ids_name_buf) - 1;
++	memcpy(ids_name_buf, start, len);
++	ids_name_buf[len] = '\0';
++	return ids_name_buf;
++}
++
++static const char *ids_lookup(const char *modalias, const char *key)
++{
++	unsigned int vid = 0, pid = 0, id;
++	const char *s, *p;
++	int cur_vid = -1;
++	bool want_product = false;
++
++	if (!usb_ids_buf)
++		return NULL;
++	p = strrchr(modalias, 'v');
++	if (!p || sscanf(p + 1, "%4x", &vid) != 1)
++		return NULL;
++	p = strchr(modalias, 'p');
++	if (p && sscanf(p + 1, "%4x", &pid) == 1 && pid != 0)
++		want_product = (strcmp(key, "ID_MODEL_FROM_DATABASE") == 0);
++	if (!want_product && strcmp(key, "ID_VENDOR_FROM_DATABASE") != 0)
++		return NULL;
++
++	for (s = usb_ids_buf; *s; ) {
++		const char *e = strchr(s, '\n');
++		size_t len = e ? (size_t)(e - s) : strlen(s);
++		int tabs = 0;
++
++		while ((size_t)tabs < len && s[tabs] == '\t')
++			tabs++;
++		if (tabs == 0) {
++			if ((size_t)tabs + 5 > len)
++				{ }
++			if (len > 4 && isxdigit((unsigned char)s[0]) &&
++			    isxdigit((unsigned char)s[1]) &&
++			    isxdigit((unsigned char)s[2]) &&
++			    isxdigit((unsigned char)s[3]) &&
++			    sscanf(s, "%4x", &id) == 1) {
++				cur_vid = (int)id;
++				if (!want_product && cur_vid == (int)vid)
++					return ids_name(s + 4, len - 4);
++			}
++		} else if (tabs == 1 && want_product && cur_vid == (int)vid &&
++			   len > 5 && sscanf(s + 1, "%4x", &id) == 1 && id == pid) {
++			return ids_name(s + 5, len - 5);
++		}
++		s = e ? e + 1 : s + len;
++	}
++	return NULL;
++}
++
+ static const char *hwdb_get(const char *modalias, const char *key)
+ {
++#ifdef HAVE_LIBUDEV
+ 	struct udev_list_entry *entry;
+ 
+-	udev_list_entry_foreach(entry, udev_hwdb_get_properties_list_entry(hwdb, modalias, 0))
+-		if (strcmp(udev_list_entry_get_name(entry), key) == 0)
+-			return udev_list_entry_get_value(entry);
+-
+-	return NULL;
++	if (hwdb)
++		udev_list_entry_foreach(entry, udev_hwdb_get_properties_list_entry(hwdb, modalias, 0))
++			if (strcmp(udev_list_entry_get_name(entry), key) == 0)
++				return udev_list_entry_get_value(entry);
++#endif
++	return ids_lookup(modalias, key);
+ }
+ 
+ const char *names_vendor(uint16_t vendorid)
+@@ -444,6 +548,7 @@
+ {
+ 	int r;
+ 
++#ifdef HAVE_LIBUDEV
+ 	udev = udev_new();
+ 	if (!udev)
+ 		r = -1;
+@@ -452,6 +557,8 @@
+ 		if (!hwdb)
+ 			r = -1;
+ 	}
++#endif
++	(void)load_usb_ids();
+ 
+ 	r = hash_tables();
+ 
+@@ -460,6 +567,12 @@
+ 
+ void names_exit(void)
+ {
++#ifdef HAVE_LIBUDEV
+ 	hwdb = udev_hwdb_unref(hwdb);
+ 	udev = udev_unref(udev);
++#endif
++	if (usb_ids_buf) {
++		free(usb_ids_buf);
++		usb_ids_buf = NULL;
++	}
+ }
