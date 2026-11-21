@@ -8,6 +8,8 @@
 
 A standalone, fully static build of **lsusb**, a USB device listing tool (usbutils + libusb) with usb.ids embedded. Eight executables are provided — four for Linux (musl) and four for Android (NDK, API 24) — together with the upstream source and build scripts. The binaries have no dynamic interpreter and no shared-library dependencies, and are aligned to 16 KB pages, so they run on Android phones (Android 7–16), embedded devices, and minimal Linux systems.
 
+**Upstream version:** usbutils 017 + libusb 1.0.27
+
 ### Executables
 
 | File | Size | MD5 |
@@ -72,6 +74,8 @@ sh build/build-lsusb-8.sh
 
 **lsusb** 的独立全静态构建包，USB 设备列出工具（usbutils + libusb），usb.ids 已内嵌。共提供 8 个可执行文件——Linux（musl）4 个、Android（NDK，API 24）4 个，并附上游源码与构建脚本。可执行文件无动态解释器、无共享库依赖，按 16 KB 页对齐，可在安卓手机（Android 7–16）、嵌入式设备和精简 Linux 系统上运行。
 
+**上游版本：**usbutils 017 + libusb 1.0.27
+
 ### 可执行文件
 
 | 文件 | Size | MD5 |
@@ -135,6 +139,8 @@ sh build/build-lsusb-8.sh
 ## 繁體中文
 
 **lsusb** 的獨立全靜態建構包，USB 裝置列出工具（usbutils + libusb），usb.ids 已內嵌。共提供 8 個可執行檔——Linux（musl）4 個、Android（NDK，API 24）4 個，並附上游原始碼與建構腳本。可執行檔無動態直譯器、無共用程式庫相依性，按 16 KB 頁對齊，可在安卓手機（Android 7–16）、嵌入式裝置和精簡 Linux 系統上執行。
+
+**上游版本：**usbutils 017 + libusb 1.0.27
 
 ### 可執行檔
 
